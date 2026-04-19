@@ -1,0 +1,6 @@
+# ALU units, one per line. Position = dispatch index (op_idx % N).
+# Blanks and # comments are ignored.
+# Note: 127.0.0.1 does NOT work — SOCK_RAW packets to loopback bypass
+# the kernel's ICMP echo-reply generator. Use hosts reachable via a real NIC.
+8.8.8.8
+1.1.1.1

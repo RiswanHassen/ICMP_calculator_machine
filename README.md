@@ -2,32 +2,88 @@
 
 **Distributed Arithmetic via Standard ICMP Reply Counts**
 
-A proof-of-concept that performs arithmetic operations by encoding values into ICMP echo request/reply sequences. The result of a calculation is derived from the number of replies received — turning a diagnostic protocol into an unconventional computation channel.
+A proof-of-concept that performs arithmetic by turning the internet into a
+computer: hosts are the ALUs, ping counts encode operands, and echo-reply
+counts form the result register. A diagnostic protocol is repurposed as a
+covert computation channel.
 
 ---
 
-## Concept
+## Model
 
-ICMP is designed for network diagnostics, not data transfer. That's exactly what makes it interesting: most firewalls, IDS/IPS systems, and monitoring tools treat ICMP as benign traffic. This project explores what happens when you repurpose that assumption.
+| Computer architecture | ICMP calculator           |
+|-----------------------|---------------------------|
+| ALU                   | remote host               |
+| Operand               | ping count                |
+| Instruction dispatch  | atomic op → host (i mod N)|
+| Execution             | synchronized ping burst   |
+| Result register       | per-op echo-reply counts  |
 
-The calculator encodes operands and operations into ping sequences. The "result" emerges from counting replies across distributed nodes. It's impractical for real computation — but it demonstrates a covert channel primitive that has real implications for network security.
+A calculation decomposes into Y atomic ping-emission operations. Each op
+is dispatched to one ALU, indexed by its position in `targets.txt`
+(wrapping via modulo). All ops fire as a synchronized burst — every
+sender thread crosses a `threading.Barrier` and then emits its pings
+back-to-back, so they hit their ALUs as close to simultaneously as the
+OS scheduler allows. Replies flow back and are correlated per op via a
+unique ICMP id, giving a clean per-op reply count regardless of which
+host served the op.
 
-## Why This Exists
+```
+decompose :  (op, a, b)             → [c_0, ..., c_{Y-1}]
+dispatch  :  atomic op i            → targets[i mod N]
+execute   :  burst of sync'd threads → echo replies
+decode    :  per-op reply counts    → result
+```
+
+## Operations
+
+| op  | decomposition | decoding       |
+|-----|---------------|----------------|
+| add | `[a, b]`      | sum of replies |
+| sub | `[a, b]`      | `r[0] − r[1]`  |
+| mul | `[a] × b`     | sum of replies |
+
+## Why this exists
 
 This is a security research artifact. It illustrates:
 
-- How protocol assumptions create blind spots in network monitoring
-- That covert channels can hide in the most mundane traffic
-- The gap between what a protocol is *designed* for and what it can *be used* for
+- How protocol assumptions create blind spots in network monitoring.
+- That covert channels can hide in the most mundane traffic.
+- The gap between what a protocol is *designed* for and what it can *be used* for.
+
+Firewalls, IDS, and flow monitors typically treat ICMP as benign. A
+stream of echo requests fanning out to N hosts, with their replies
+re-aggregated into arithmetic, sits well inside that blind spot.
 
 ## Usage
 
 ```bash
-python icmp_calc.py --operation "add" --a 5 --b 3 --targets targets.txt
+sudo python icmp_calc.py --operation add --a 5 --b 3 --targets targets.txt
 ```
 
-Requires raw socket privileges.
+`targets.txt` is a numbered list of hosts (one per line, `#` for
+comments). Line position is the dispatch index.
+
+Flags:
+
+- `--operation {add,sub,mul}`
+- `--a`, `--b` — operands
+- `--targets` — path to host list
+- `--debug` — log every ICMP packet the sniffer observes
+- `--drain SECONDS` — wait time after burst for late replies (default 1.5)
+
+Requires raw socket privileges (root or `CAP_NET_RAW`).
+
+## Caveats
+
+- **127.0.0.1 does not work.** `SOCK_RAW` packets to loopback bypass the
+  kernel's echo-reply generator. Test against hosts reachable via a real
+  NIC.
+- Reply counts are noisy in the wild: packet loss, ICMP rate limits, and
+  host filtering under-count replies and silently corrupt the result.
+- This is not a reliable computation engine — it is a channel-primitive
+  demonstration.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE).
