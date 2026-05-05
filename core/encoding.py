@@ -9,11 +9,12 @@ Reply counts per op are aggregated to decode the result.
     decode    : (op, [reply_count_0, ..., reply_count_{Y-1}]) → result
 """
 from dataclasses import dataclass
+from typing import Sequence
 
-SUPPORTED = ("add", "sub", "mul")
+SUPPORTED: tuple[str, ...] = ("add", "sub", "mul")
 
 
-@dataclass
+@dataclass(frozen=True)
 class AtomicOp:
     op_idx: int   # position in the atomic-op sequence (0..Y-1)
     count: int    # ping emissions
@@ -21,7 +22,7 @@ class AtomicOp:
     icmp_id: int  # 16-bit id, unique per op for correlation
 
 
-def decompose(operation, a, b):
+def decompose(operation: str, a: int, b: int) -> list[int]:
     """Break (op, a, b) into per-atomic-op ping counts.
 
     add(a, b) → [a, b]         — two operands, summed at the decoder
@@ -37,7 +38,7 @@ def decompose(operation, a, b):
     raise ValueError(f"unsupported operation: {operation}")
 
 
-def expected(operation, a, b):
+def expected(operation: str, a: int, b: int) -> int:
     if operation == "add":
         return a + b
     if operation == "sub":
@@ -47,7 +48,13 @@ def expected(operation, a, b):
     raise ValueError(f"unsupported operation: {operation}")
 
 
-def dispatch(operation, a, b, targets, id_pool):
+def dispatch(
+    operation: str,
+    a: int,
+    b: int,
+    targets: Sequence[str],
+    id_pool: Sequence[int],
+) -> list[AtomicOp]:
     """Map each atomic op to a host (round-robin by index) and an ICMP id."""
     if not targets:
         raise ValueError("need at least one target")
@@ -60,7 +67,7 @@ def dispatch(operation, a, b, targets, id_pool):
     ]
 
 
-def decode(operation, counts_per_op):
+def decode(operation: str, counts_per_op: Sequence[int]) -> int:
     """Aggregate per-op reply counts into the final result."""
     if operation == "add":
         return sum(counts_per_op)

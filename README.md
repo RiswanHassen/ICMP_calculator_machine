@@ -74,6 +74,33 @@ Flags:
 
 Requires raw socket privileges (root or `CAP_NET_RAW`).
 
+Logs are emitted as JSON to stderr; the final line is `RUN_OK` or
+`RUN_FAIL <code>` (see `core/errors.py`). Set `ICMPCALC_LOG_LEVEL=DEBUG`
+or pass `--debug` for per-packet sniff traces.
+
+## Tests
+
+```bash
+pytest -v
+```
+
+Pure logic (`core/encoding.py`, `core/targets.py`) is fully covered.
+Network paths are verified manually against reachable hosts — see
+`docs/adr/0003-loopback-not-supported.md` for why CI integration tests
+aren't wired up.
+
+## Project layout
+
+```
+icmp_calc.py            # CLI entry
+core/                   # encoding, dispatch, burst sender, sniffer, log, errors
+tests/                  # pytest, pure-logic coverage
+docs/adr/               # design decisions
+CLAUDE.md               # architecture and rules reference
+CHANGELOG.md            # Keep-a-Changelog
+targets.txt             # ALU list (one host per line, # comments)
+```
+
 ## Caveats
 
 - **127.0.0.1 does not work.** `SOCK_RAW` packets to loopback bypass the
